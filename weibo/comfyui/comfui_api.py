@@ -1,17 +1,40 @@
-import copy
+
 import json
 import os
 import random
 import time
 from io import BytesIO
-
 from PIL import Image
-
 import requests
-
 import logging
 
+from weibo.comfyui.work_flow_info import  template_dict_replace, WorkFlowInfo
+
 logger = logging.getLogger()
+
+
+def reboot_env():
+    url ="http://192.168.90.85:8188/api/manager/reboot"
+    requests.get(url)
+
+
+def get_scale(image_bytes):
+    ## 缩放图片 不然太慢
+    img = Image.open(image_bytes)
+    MAX_WIDTH, MAX_HEIGHT = 1024, 1024
+    # 2. 获取原图大小
+    w, h = img.size
+    # 3. 根据最大尺寸计算缩放比例（等比缩放）
+    scale_w = MAX_WIDTH / w
+    scale_h = MAX_HEIGHT / h
+    scale = min(scale_w, scale_h, 1)
+
+    return f"{scale:.1f}"
+
+
+def get_seed():
+    return str(random.randint(10 ** 13, 10 ** 15 - 1))
+
 
 ## url 上传
 def upload_input_url(url,name=None):
@@ -51,19 +74,12 @@ def upload_input_url(url,name=None):
     upload_resp = requests.post(COMFY_URL, files=files, data=data)
     upload_result = upload_resp.json()
 
-    ## 缩放图片 不然太慢
-    img = Image.open(image_bytes)
-    MAX_WIDTH, MAX_HEIGHT = 1024, 1024
-    # 2. 获取原图大小
-    w, h = img.size
-    # 3. 根据最大尺寸计算缩放比例（等比缩放）
-    scale_w = MAX_WIDTH / w
-    scale_h = MAX_HEIGHT / h
-    scale = min(scale_w, scale_h, 1.0)
+    scale = get_scale(image_bytes)
 
     logger.info("upload_input_url result %s scale=%s", upload_result, scale)
 
     return upload_result.get("name"),scale
+
 
 
 # 二进制上传comfui
@@ -76,51 +92,13 @@ def upload_input(image_name,image_bytes,image_type):
     data = {
         "type": "input"  # 必须
     }
+
+    scale = get_scale(image_bytes)
     upload_resp = requests.post(COMFY_URL, files=files, data=data)
     upload_result = upload_resp.json()
     logger.info("upload_input result %s ", upload_result)
-    return upload_result.get("name")
+    return upload_result.get("name"),scale
 
-
-# 替换工作流
-def build_comfyui_prompt(
-    prompt_text,
-    upload_image_name,
-    scale=1,
-    negative_prompt=None,
-    template_json='qwen_edit_all.json',
-    seed=None
-):
-    if seed is None:
-        seed = random.randint(10 ** 14, 10 ** 15 - 1)
-
-    if not negative_prompt :
-        negative_prompt = ""   # 如果为空或None，自动变空字符串
-
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(base_dir, template_json)
-
-    with open(template_path, 'r', encoding='utf-8') as f:
-        template = json.load(f)
-
-    workflow = copy.deepcopy(template)
-
-    # 正向提示词
-    workflow["prompt"]["2"]["inputs"]["prompt"] = prompt_text
-
-    # seed
-    workflow["prompt"]["4"]["inputs"]["seed"] = seed
-
-    # 负向提示词（如果节点存在才设置）
-    workflow["prompt"]["5"]["inputs"]["text"] = negative_prompt
-
-    workflow["prompt"]["11"]["inputs"]["scale_by"] = scale
-    # 上传图片
-    workflow["prompt"]["14"]["inputs"]["image"] = upload_image_name
-
-    logger.info("build_comfyui_prompt workflow %s", workflow)
-
-    return workflow
 
 
 #执行工作流
@@ -165,13 +143,24 @@ def comfyui_history(prompt_id,max_wait=600):
 
         # 确保任务完成
         status = task_data.get("status", {})
+
+        if  status.get("status_str")=="error":
+            logger.info("comfyui_history 执行error=%s",url)
+            break
+
         if not status.get("completed", False):
             if time.time() - start_time > max_wait:
                 raise TimeoutError("ComfyUI 任务未完成，超时退出")
             time.sleep(10)
             continue
 
-        images = task_data["outputs"]["12"]["images"]
+        images = []
+
+        for node_output in task_data.get("outputs", {}).values():
+            if "images" in node_output:
+                images = node_output["images"]
+                break
+        # images = task_data["outputs"]["12"]["images"]
         for img in images:
             filename = img["filename"]
             subfolder = img["subfolder"]
@@ -184,6 +173,101 @@ def comfyui_history(prompt_id,max_wait=600):
             break
 
     return image_url
+
+
+
+def comfy_ui_edit_run(minio_url,prompt,na_prompt,template_json,image_batch):
+    name,scale = upload_input_url(minio_url)
+
+    wf = WorkFlowInfo(template_json)
+    wf.prompt = prompt
+    wf.na_prompt = na_prompt
+    wf.seed = get_seed()
+    wf.scale = scale
+    wf.image1 = name
+    wf.ref_images_num = len(image_batch)
+
+
+
+    for index, img in enumerate(image_batch):
+        name1, scale = upload_input_url(img)
+        if index == 0:
+            wf.image2 = name1
+        if index == 1:
+            wf.image3 = name1
+        if index == 2:
+            wf.image4 = name1
+
+    work = template_workflow_build(wf)
+
+    logger.info("album_update work= %s", json.dumps(work, indent=4, ensure_ascii=False))
+    prompt_id = comfyui_run(work)
+    return prompt_id
+
+
+def template_workflow_build(info:WorkFlowInfo):
+    template_name = info.template_name
+    files = template_dict_replace.get(template_name, None)
+    if not files:
+        return None
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(base_dir, "work", template_name)
+
+    template_str=None
+    with open(template_path, 'r', encoding='utf-8') as f:
+        template_str = f.read()
+
+    for file in files:
+        attr_name = file.strip().replace("#", "")
+        value = getattr(info, attr_name, "")
+        if value is None:
+            value = ""
+        template_str = template_str.replace(
+            file,
+            json.dumps(value)[1:-1]
+        )
+
+    workflow_dict = json.loads(template_str)
+
+    if info.template_name == "qwen_edit_all_batch.json":
+        num = info.ref_images_num
+
+        # 节点ID顺序（14固定）
+        optional_nodes = ["15", "16", "17"]
+
+        # 需要删除的节点数量
+        remove_count = max(0, 3 - num)
+
+        # 从后往前删（避免逻辑错乱）
+        for node_id in optional_nodes[::-1][:remove_count]:
+            workflow_dict["prompt"].pop(node_id, None)
+
+        # 同时删除 TextEncodeQwenImageEditPlus 里的引用
+        text_inputs = workflow_dict["prompt"]["2"]["inputs"]
+
+        if num < 3:
+            text_inputs.pop("image4", None)
+        if num < 2:
+            text_inputs.pop("image3", None)
+        if num < 1:
+            text_inputs.pop("image2", None)
+
+    logger.info("build_workflow workflow_dict = %s", workflow_dict)
+
+    return workflow_dict
+
+
+
+def comfy_ui_create_run(info:WorkFlowInfo):
+    work = template_workflow_build(info)
+    logger.info("build_workflow work= %s", json.dumps(work, indent=4, ensure_ascii=False))
+    prompt_id = comfyui_run(work)
+    return prompt_id
+
+
+
+
 
 
 

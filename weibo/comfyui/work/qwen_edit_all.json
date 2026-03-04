@@ -11,7 +11,7 @@
         },
         "2": {
             "inputs": {
-                "prompt": "{prompt}",
+                "prompt": "#prompt#",
                 "clip": [
                     "1",
                     1
@@ -32,8 +32,8 @@
         },
         "4": {
             "inputs": {
-                "seed": "{seed}",
-                "steps": 4,
+                "seed": "#seed#",
+                "steps": 6,
                 "cfg": 1,
                 "sampler_name": "euler_ancestral",
                 "scheduler": "beta",
@@ -62,7 +62,7 @@
         },
         "5": {
             "inputs": {
-                "text": "{na_prompt}",
+                "text": "#na_prompt#",
                 "clip": [
                     "1",
                     1
@@ -108,7 +108,7 @@
         "11": {
             "inputs": {
                 "upscale_method": "nearest-exact",
-                "scale_by": 1,
+                "scale_by": "#scale#",
                 "samples": [
                     "10",
                     0
@@ -134,7 +134,7 @@
         },
         "14": {
             "inputs": {
-                "image": "{upload_image}"
+                "image": "#image1#"
             },
             "class_type": "LoadImage",
             "_meta": {

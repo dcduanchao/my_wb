@@ -1,4 +1,7 @@
 # utils/minio_client.py
+import os
+import uuid
+
 from minio import Minio
 from minio.error import S3Error
 from io import BytesIO
@@ -74,6 +77,38 @@ class MinioClient:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
             return self.upload_bytes(bucket_name, object_name, resp.content, content_type)
+        except requests.RequestException as e:
+            return False, f"下载失败: {e}"
+
+
+    def upload_comfyui_url(self, url):
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type")
+
+            filename = None
+            content_disposition = response.headers.get("Content-Disposition")
+            if content_disposition:
+                # 通常 Content-Disposition 类似：attachment; filename="ComfyUI_00019_.png"
+                parts = content_disposition.split(";")
+                for part in parts:
+                    part = part.strip()
+                    if part.startswith("filename="):
+                        filename = part.split("=", 1)[1].strip('"')
+                        break
+            if not filename:
+                file_ext = ".png"
+                content_type = "image/png"
+            else:
+                file_ext = os.path.splitext(filename)[1]
+
+            if not content_type:
+                content_type = "image/png"
+            random_str = uuid.uuid4().hex[:16]
+            filename1 = f"{random_str}{file_ext}"
+            re = minio_client.upload_bytes("comfyui", filename1, response.content, content_type)
+            return re
         except requests.RequestException as e:
             return False, f"下载失败: {e}"
 

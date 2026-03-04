@@ -1,6 +1,6 @@
 from django.urls import path
 
-from weibo import views,test_views
+from weibo import views,test_views,comfyui_views
 
 
 
@@ -16,6 +16,16 @@ urlpatterns = [
     path('album/update', views.album_update, name='album_update'),
     path('album/update/record', views.album_update_record, name='album_update'),
     path('album/record/delete', views.album_record_delete, name='album_record_delete'),
+
+    # comfyui
+    path("comfyui/reboot", comfyui_views.reboot, name="comfyui_reboot"),
+    path("comfyui/edit", comfyui_views.comfyui_edit, name="comfyui_edit"),
+    path("comfyui/edit/list", comfyui_views.comfyui_edit_list, name="comfyui_edit_list"),
+    path("comfyui/image/delete", comfyui_views.comfyui_image_delete, name="comfyui_image_delete"),
+    path("comfyui/create", comfyui_views.comfyui_create, name="comfyui_create"),
+
+
+
 
     # test
     path("upload/local/", test_views.upload_local_file, name="upload_local_file"),

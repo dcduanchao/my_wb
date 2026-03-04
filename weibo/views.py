@@ -20,7 +20,8 @@ from django.views.decorators.http import require_GET, require_POST
 from minio_util import minio_client
 from utils.result_resp import APIResponse
 from weibo import wb_header
-from weibo.comfyui.comfui_api import build_comfyui_prompt, comfyui_run, comfyui_history, upload_input, upload_input_url
+from weibo.comfyui.comfui_api import comfyui_run, comfyui_history, upload_input_url, get_seed, template_workflow_build
+from weibo.comfyui.work_flow_info import WorkFlowInfo
 from weibo.models import WbUser, WeiboImages, WeiboUpdateImage
 from weibo.wb_image import  get_image1
 from weibo.wbapi import get_user_info
@@ -166,11 +167,16 @@ def album_update(request):
     prompt_text = data.get("prompt")
     na_prompt = data.get("na_prompt")
 
+    wf = WorkFlowInfo("qwen_edit_all.json")
+    wf.prompt = prompt_text
+    wf.na_prompt = na_prompt
+    wf.seed = get_seed()
+    wf.scale = scale
+    wf.image1 = upload_image_name
 
-    work = build_comfyui_prompt(prompt_text, upload_image_name,scale,na_prompt)
+    work = template_workflow_build(wf)
 
     logger.info("album_update work= %s",json.dumps(work, indent=4, ensure_ascii=False))
-
 
 
     prompt_id = comfyui_run(work)

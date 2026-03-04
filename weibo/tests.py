@@ -8,7 +8,10 @@ from io import BytesIO
 import requests
 
 
-from weibo.comfyui.comfui_api import build_comfyui_prompt, upload_input_url, comfyui_run, comfyui_history
+from weibo.comfyui.comfui_api import build_comfyui_prompt, upload_input_url, comfyui_run, comfyui_history, \
+    template_workflow_build, get_seed
+from weibo.comfyui.work_flow_info import WorkFlowInfo
+
 
 def test2():
     url = "http://192.168.30.33:9100/weibo/006eVYYigy1hgqxdkmxizj32c0340e83.jpg"
@@ -49,8 +52,21 @@ def test1():
 
     print(f"原图: {w}x{h}, scale_by = {scale:.1f}")
 
+def test3():
+    wf = WorkFlowInfo( "qwen_edit_all_batch.json")
+    wf.prompt="正向"
+    wf.na_prompt="负向"
+    wf.seed=get_seed()
+    print(wf.seed)
+    wf.scale="0.5"
+    wf.image1="image111.jpg"
+
+    wk = template_workflow_build(wf)
+
+    print(json.dumps(wk, indent=4, ensure_ascii=False))
+
 if __name__ == '__main__':
-    test1()
+    test3()
 
 
 
