@@ -113,6 +113,10 @@ class MinioClient:
             return False, f"下载失败: {e}"
 
 
+
+
+
+
     def delete(self, bucket_name, object_name ):
         self.ensure_bucket(bucket_name)
         try:

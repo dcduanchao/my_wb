@@ -1,10 +1,10 @@
 import json
 import logging
-import os
-import threading
-import uuid
 
-import requests
+import threading
+
+
+
 from django.core.paginator import Paginator
 
 from django.views.decorators.http import require_POST, require_GET

@@ -98,7 +98,7 @@ class Command(BaseCommand):
                        content_type = "video/quicktime"  # mov 文件
                        object_name = f"{pid}.mov"
                    else:
-                       content_type = "image/mp4"
+                       content_type = "video/mp4"
                        object_name = f"{pid}.mp4"
                    re = minio_client.upload_bytes_io("weibo", object_name, video_data, content_type)
                    status_code, msg, v_url = re
